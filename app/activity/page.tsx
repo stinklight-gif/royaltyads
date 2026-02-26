@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -22,6 +23,9 @@ const actionBadgeClass: Record<AutomationAction, string> = {
   decrease: "bg-red-500/20 text-red-300 border-red-500/40",
   skipped_floor: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
   no_action: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
+  pending_increase: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  pending_decrease: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  rejected: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
 };
 
 const mapEntry = (entry: Partial<AutomationLogEntry>): AutomationLogEntry => ({
@@ -40,8 +44,21 @@ const mapEntry = (entry: Partial<AutomationLogEntry>): AutomationLogEntry => ({
   acos_target: Number(entry.acos_target) || 30,
   acos_threshold: Number(entry.acos_threshold) || 40,
   reason: String(entry.reason ?? "No reason recorded."),
+  approved_at: entry.approved_at ? String(entry.approved_at) : null,
+  approved: Boolean(entry.approved),
   created_at: String(entry.created_at ?? new Date().toISOString()),
 });
+
+const isPendingAction = (action: AutomationAction) =>
+  action === "pending_increase" || action === "pending_decrease";
+
+const actionLabel = (action: AutomationAction) => {
+  if (action === "pending_increase" || action === "pending_decrease") {
+    return "Pending";
+  }
+
+  return action;
+};
 
 export default function ActivityPage() {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -49,39 +66,110 @@ export default function ActivityPage() {
   const [rows, setRows] = useState<AutomationLogEntry[]>(mockAutomationLog.slice(0, 100));
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [workingIds, setWorkingIds] = useState<Set<string>>(new Set());
+
+  const loadLogs = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("automation_log")
+      .select(
+        "id, campaign_id, campaign_name, action, rule_triggered, old_budget, new_budget, budget_utilization, today_acos, acos_target, acos_threshold, reason, approved_at, approved, created_at",
+      )
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error || !data) {
+      setMessage("Showing mock log data. Run migration/cron to load live automation logs.");
+      setLoading(false);
+      return;
+    }
+
+    setRows((data as Partial<AutomationLogEntry>[]).map(mapEntry));
+    setMessage("Live logs loaded.");
+    setLoading(false);
+  }, [supabase]);
 
   useEffect(() => {
     let mounted = true;
 
-    const loadLogs = async () => {
-      const { data, error } = await supabase
-        .from("automation_log")
-        .select(
-          "id, campaign_id, campaign_name, action, rule_triggered, old_budget, new_budget, budget_utilization, today_acos, acos_target, acos_threshold, reason, created_at",
-        )
-        .order("created_at", { ascending: false })
-        .limit(100);
-
+    const run = async () => {
+      await loadLogs();
       if (!mounted) {
         return;
       }
-
-      if (error || !data) {
-        setMessage("Showing mock log data. Run migration/cron to load live automation logs.");
-        setLoading(false);
-        return;
-      }
-
-      setRows((data as Partial<AutomationLogEntry>[]).map(mapEntry));
-      setLoading(false);
     };
 
-    void loadLogs();
+    void run();
 
     return () => {
       mounted = false;
     };
-  }, [supabase]);
+  }, [loadLogs]);
+
+  const pendingRows = rows.filter((entry) => isPendingAction(entry.action));
+
+  const setWorking = (id: string, working: boolean) => {
+    setWorkingIds((previous) => {
+      const next = new Set(previous);
+      if (working) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const handleDecision = async (id: string, approved: boolean) => {
+    setWorking(id, true);
+    setMessage("");
+
+    try {
+      const response = await fetch("/api/approve", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, approved }),
+      });
+
+      const payload = (await response.json()) as { success: boolean; message: string };
+      if (!response.ok || !payload.success) {
+        setMessage(payload.message || "Action failed.");
+        setWorking(id, false);
+        return;
+      }
+
+      setRows((previous) =>
+        previous.map((entry) => {
+          if (entry.id !== id) {
+            return entry;
+          }
+
+          if (approved) {
+            return {
+              ...entry,
+              action: entry.action === "pending_increase" ? "increase" : "decrease",
+              approved: true,
+              approved_at: new Date().toISOString(),
+            };
+          }
+
+          return {
+            ...entry,
+            action: "rejected",
+            approved: false,
+            approved_at: new Date().toISOString(),
+          };
+        }),
+      );
+
+      setMessage(payload.message);
+    } catch {
+      setMessage("Action failed.");
+    } finally {
+      setWorking(id, false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -92,13 +180,69 @@ export default function ActivityPage() {
         </p>
       </div>
 
+      {pendingRows.length > 0 ? (
+        <Card className="border-yellow-600/50 bg-yellow-900/10">
+          <CardHeader>
+            <CardTitle className="text-base text-yellow-200">
+              {pendingRows.length} actions waiting for your approval
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {pendingRows.map((entry) => {
+              const pendingIncrease = entry.action === "pending_increase";
+              const working = workingIds.has(entry.id);
+
+              return (
+                <div
+                  key={`pending-${entry.id}`}
+                  className="rounded-md border border-yellow-700/60 bg-zinc-900/60 p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="font-medium text-zinc-100">{entry.campaign_name}</p>
+                      <p className="text-xs text-zinc-300">
+                        Recommended action: {pendingIncrease ? "increase budget" : "decrease budget"}
+                      </p>
+                      <p className="text-xs font-mono text-zinc-300">
+                        {formatCurrency(entry.old_budget)}
+                        {" -> "}
+                        {formatCurrency(entry.new_budget)}
+                      </p>
+                      <p className="text-xs text-zinc-400">{entry.reason}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        disabled={working}
+                        onClick={() => handleDecision(entry.id, true)}
+                        className="bg-emerald-600 text-white hover:bg-emerald-500"
+                      >
+                        APPROVE
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={working}
+                        onClick={() => handleDecision(entry.id, false)}
+                      >
+                        REJECT
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Automation History</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-xs text-zinc-400">
-            {loading ? "Loading logs..." : message || "Live logs loaded."}
+            {loading ? "Loading logs..." : message || "Ready."}
           </p>
           <Table>
             <TableHeader>
@@ -127,7 +271,7 @@ export default function ActivityPage() {
                   <TableCell className="font-medium">{entry.campaign_name}</TableCell>
                   <TableCell>
                     <Badge variant="outline" className={actionBadgeClass[entry.action]}>
-                      {entry.action}
+                      {actionLabel(entry.action)}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono">

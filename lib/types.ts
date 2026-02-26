@@ -2,11 +2,16 @@ export type CampaignStatus = "ENABLED" | "PAUSED" | "ARCHIVED";
 
 export type MatchType = "BROAD" | "PHRASE" | "EXACT";
 
+export type AutomationMode = "off" | "approval" | "auto";
+
 export type AutomationAction =
   | "increase"
   | "decrease"
   | "skipped_floor"
-  | "no_action";
+  | "no_action"
+  | "pending_increase"
+  | "pending_decrease"
+  | "rejected";
 
 export type AutomationRuleTriggered = "scale_up" | "scale_down" | null;
 
@@ -54,7 +59,7 @@ export interface AdSettings {
   scale_up_pct: number;
   scale_down_pct: number;
   budget_floor: number;
-  automation_enabled: boolean;
+  automation_mode: AutomationMode;
   daily_budget_cap: number;
 }
 
@@ -71,5 +76,7 @@ export interface AutomationLogEntry {
   acos_target: number;
   acos_threshold: number;
   reason: string;
+  approved_at: string | null;
+  approved: boolean;
   created_at: string;
 }

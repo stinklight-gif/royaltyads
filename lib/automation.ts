@@ -10,7 +10,7 @@ export const DEFAULT_AUTOMATION_SETTINGS: AdSettings = {
   scale_up_pct: 20,
   scale_down_pct: 15,
   budget_floor: 5,
-  automation_enabled: false,
+  automation_mode: "off",
   daily_budget_cap: 100,
 };
 
@@ -43,7 +43,14 @@ export const normalizeAdSettings = (
       DEFAULT_AUTOMATION_SETTINGS.scale_down_pct,
     ),
     budget_floor: toNumber(raw.budget_floor, DEFAULT_AUTOMATION_SETTINGS.budget_floor),
-    automation_enabled: Boolean(raw.automation_enabled),
+    automation_mode:
+      raw.automation_mode === "off" ||
+      raw.automation_mode === "approval" ||
+      raw.automation_mode === "auto"
+        ? raw.automation_mode
+        : Boolean((raw as { automation_enabled?: boolean }).automation_enabled)
+          ? "auto"
+          : "off",
     daily_budget_cap: toNumber(
       raw.daily_budget_cap,
       DEFAULT_AUTOMATION_SETTINGS.daily_budget_cap,

@@ -49,6 +49,9 @@ const actionBadgeClass: Record<AutomationAction, string> = {
   decrease: "bg-red-500/20 text-red-300 border-red-500/40",
   skipped_floor: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
   no_action: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
+  pending_increase: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  pending_decrease: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  rejected: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
 };
 
 const mapLog = (entry: Partial<AutomationLogEntry>): AutomationLogEntry => ({
@@ -67,6 +70,8 @@ const mapLog = (entry: Partial<AutomationLogEntry>): AutomationLogEntry => ({
   acos_target: Number(entry.acos_target) || 30,
   acos_threshold: Number(entry.acos_threshold) || 40,
   reason: String(entry.reason ?? ""),
+  approved_at: entry.approved_at ? String(entry.approved_at) : null,
+  approved: Boolean(entry.approved),
   created_at: String(entry.created_at ?? new Date().toISOString()),
 });
 
@@ -86,7 +91,7 @@ export default function DashboardPage() {
         supabase
           .from("ad_settings")
           .select(
-            "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_enabled, daily_budget_cap",
+            "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap",
           )
           .order("updated_at", { ascending: false })
           .limit(1)
@@ -94,7 +99,7 @@ export default function DashboardPage() {
         supabase
           .from("automation_log")
           .select(
-            "id, campaign_id, campaign_name, action, rule_triggered, old_budget, new_budget, budget_utilization, today_acos, acos_target, acos_threshold, reason, created_at",
+            "id, campaign_id, campaign_name, action, rule_triggered, old_budget, new_budget, budget_utilization, today_acos, acos_target, acos_threshold, reason, approved_at, approved, created_at",
           )
           .order("created_at", { ascending: false })
           .limit(100),
@@ -105,7 +110,13 @@ export default function DashboardPage() {
       }
 
       if (!settingsResult.error && settingsResult.data) {
-        setSettings(normalizeAdSettings(settingsResult.data as Partial<AdSettings>));
+        setSettings(
+          normalizeAdSettings(
+            settingsResult.data as Partial<AdSettings> & {
+              automation_enabled?: boolean;
+            },
+          ),
+        );
       }
 
       if (!logsResult.error && logsResult.data && logsResult.data.length > 0) {

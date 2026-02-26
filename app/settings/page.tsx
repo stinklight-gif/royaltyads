@@ -7,9 +7,33 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_AUTOMATION_SETTINGS, normalizeAdSettings } from "@/lib/automation";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { AdSettings } from "@/lib/types";
+import { AdSettings, AutomationMode } from "@/lib/types";
 
 const defaultForm: AdSettings = { ...DEFAULT_AUTOMATION_SETTINGS };
+
+const modeOptions: Array<{
+  value: AutomationMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "off",
+    label: "OFF",
+    description: "Automation disabled. Cron runs but takes no action.",
+  },
+  {
+    value: "approval",
+    label: "APPROVAL MODE",
+    description:
+      "Cron suggests budget changes. You approve each one before it applies.",
+  },
+  {
+    value: "auto",
+    label: "AUTO",
+    description:
+      "Cron applies budget changes automatically based on your rules.",
+  },
+];
 
 export default function SettingsPage() {
   const supabase = useMemo(() => getSupabaseClient(), []);
@@ -30,7 +54,7 @@ export default function SettingsPage() {
       const { data, error } = await supabase
         .from("ad_settings")
         .select(
-          "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_enabled, daily_budget_cap",
+          "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap",
         )
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -49,7 +73,9 @@ export default function SettingsPage() {
       }
 
       if (data) {
-        const normalized = normalizeAdSettings(data as Partial<AdSettings>);
+        const normalized = normalizeAdSettings(
+          data as Partial<AdSettings> & { automation_enabled?: boolean },
+        );
         setSettingsId(data.id ?? null);
         setForm(normalized);
       }
@@ -85,7 +111,8 @@ export default function SettingsPage() {
       scale_up_pct: Number(form.scale_up_pct),
       scale_down_pct: Number(form.scale_down_pct),
       budget_floor: Number(form.budget_floor),
-      automation_enabled: Boolean(form.automation_enabled),
+      automation_mode: form.automation_mode,
+      automation_enabled: form.automation_mode === "auto",
       daily_budget_cap: Number(form.daily_budget_cap),
       updated_at: new Date().toISOString(),
     };
@@ -284,28 +311,29 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-md border border-zinc-800 bg-zinc-900/60 px-3 py-2">
-            <div>
-              <p className="text-sm font-medium text-zinc-100">Automation ON/OFF</p>
-              <p className="text-xs text-zinc-400">Master switch for hourly cron actions.</p>
+          <div className="space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">
+            <p className="text-sm font-medium text-zinc-100">Automation Mode</p>
+            <div className="grid gap-2 md:grid-cols-3">
+              {modeOptions.map((option) => {
+                const active = form.automation_mode === option.value;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => updateField("automation_mode", option.value)}
+                    className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                      active
+                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-200"
+                        : "border-zinc-700 bg-zinc-950 text-zinc-300 hover:bg-zinc-900"
+                    }`}
+                  >
+                    <p className="text-xs font-semibold tracking-wide">{option.label}</p>
+                    <p className="mt-1 text-xs text-zinc-400">{option.description}</p>
+                  </button>
+                );
+              })}
             </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={form.automation_enabled}
-              onClick={() => updateField("automation_enabled", !form.automation_enabled)}
-              className={`relative inline-flex h-7 w-14 items-center rounded-full border transition-colors ${
-                form.automation_enabled
-                  ? "border-emerald-500 bg-emerald-500/30"
-                  : "border-zinc-700 bg-zinc-800"
-              }`}
-            >
-              <span
-                className={`inline-block h-5 w-5 transform rounded-full bg-zinc-100 transition-transform ${
-                  form.automation_enabled ? "translate-x-8" : "translate-x-1"
-                }`}
-              />
-            </button>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-3">

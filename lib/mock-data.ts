@@ -265,15 +265,15 @@ const buildReason = (
   oldBudget: number,
   newBudget: number,
 ) => {
-  if (action === "increase") {
+  if (action === "increase" || action === "pending_increase") {
     return `Budget util ${util.toFixed(1)}% > 80% and ACoS ${acos.toFixed(
       1,
-    )}% below target. Increased budget from $${oldBudget.toFixed(2)} to $${newBudget.toFixed(
+    )}% below target. Increase budget from $${oldBudget.toFixed(2)} to $${newBudget.toFixed(
       2,
     )}.`;
   }
 
-  if (action === "decrease") {
+  if (action === "decrease" || action === "pending_decrease") {
     return `ACoS ${acos.toFixed(1)}% exceeded threshold. Reduced budget from $${oldBudget.toFixed(
       2,
     )} to $${newBudget.toFixed(2)}.`;
@@ -288,7 +288,7 @@ const buildReason = (
   return `No rules triggered. Util ${util.toFixed(1)}%, ACoS ${acos.toFixed(1)}%.`;
 };
 
-export const mockAutomationLog: AutomationLogEntry[] = Array.from(
+const mockAutomationLogBase: AutomationLogEntry[] = Array.from(
   { length: 24 },
   (_, index) => {
     const campaign = mockCampaigns[index % mockCampaigns.length];
@@ -329,7 +329,85 @@ export const mockAutomationLog: AutomationLogEntry[] = Array.from(
       acos_target: 30,
       acos_threshold: 40,
       reason: buildReason(action, Math.max(baseUtil, 0), Math.max(baseAcos, 0), baseBudget, newBudget),
+      approved_at: new Date(Date.now() - (index + 1) * 60 * 60 * 1000).toISOString(),
+      approved: true,
       created_at: createdAt,
     };
   },
-).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+);
+
+const pendingRecommendations: AutomationLogEntry[] = [
+  {
+    id: "log-pending-1",
+    campaign_id: "cmp-1",
+    campaign_name: "Office Humor - Broad Match",
+    action: "pending_increase",
+    rule_triggered: "scale_up",
+    old_budget: 45,
+    new_budget: 54,
+    budget_utilization: 83.6,
+    today_acos: 23.7,
+    acos_target: 30,
+    acos_threshold: 40,
+    reason: "ACoS 23.7% < 30.0% target and utilization 83.6% > 80%.",
+    approved_at: null,
+    approved: false,
+    created_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "log-pending-2",
+    campaign_id: "cmp-2",
+    campaign_name: "Work Gifts - Exact",
+    action: "pending_increase",
+    rule_triggered: "scale_up",
+    old_budget: 35,
+    new_budget: 42,
+    budget_utilization: 87.1,
+    today_acos: 25.4,
+    acos_target: 30,
+    acos_threshold: 40,
+    reason: "ACoS 25.4% < 30.0% target and utilization 87.1% > 80%.",
+    approved_at: null,
+    approved: false,
+    created_at: new Date(Date.now() - 25 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "log-pending-3",
+    campaign_id: "cmp-4",
+    campaign_name: "Manager Memes - Exact",
+    action: "pending_decrease",
+    rule_triggered: "scale_down",
+    old_budget: 40,
+    new_budget: 34,
+    budget_utilization: 98.2,
+    today_acos: 45.5,
+    acos_target: 30,
+    acos_threshold: 40,
+    reason: "ACoS 45.5% exceeded 40.0% threshold.",
+    approved_at: null,
+    approved: false,
+    created_at: new Date(Date.now() - 35 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "log-pending-4",
+    campaign_id: "cmp-8",
+    campaign_name: "HR Humor - Auto",
+    action: "pending_decrease",
+    rule_triggered: "scale_down",
+    old_budget: 22,
+    new_budget: 18.7,
+    budget_utilization: 95.9,
+    today_acos: 41.2,
+    acos_target: 30,
+    acos_threshold: 40,
+    reason: "ACoS 41.2% exceeded 40.0% threshold.",
+    approved_at: null,
+    approved: false,
+    created_at: new Date(Date.now() - 45 * 60 * 1000).toISOString(),
+  },
+];
+
+export const mockAutomationLog: AutomationLogEntry[] = [
+  ...pendingRecommendations,
+  ...mockAutomationLogBase,
+].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
