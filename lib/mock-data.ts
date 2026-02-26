@@ -26,6 +26,7 @@ export const calculateAcos = (spend: number, sales: number): number => {
   if (sales <= 0) {
     return 0;
   }
+
   return (spend / sales) * 100;
 };
 
@@ -33,6 +34,7 @@ export const calculateRoas = (spend: number, sales: number): number => {
   if (spend <= 0) {
     return 0;
   }
+
   return sales / spend;
 };
 
@@ -40,6 +42,7 @@ export const calculateCtr = (clicks: number, impressions: number): number => {
   if (impressions <= 0) {
     return 0;
   }
+
   return (clicks / impressions) * 100;
 };
 
@@ -47,6 +50,7 @@ export const calculateCpc = (spend: number, clicks: number): number => {
   if (clicks <= 0) {
     return 0;
   }
+
   return spend / clicks;
 };
 
@@ -59,78 +63,31 @@ const campaignSeedData: Array<{
   impressions: number;
   clicks: number;
 }> = [
-  {
-    name: "Office Humor - Broad Match",
-    status: "ENABLED",
-    budget: 45,
-    spend: 41.8,
-    sales: 176.42,
-    impressions: 48320,
-    clicks: 1988,
-  },
-  {
-    name: "Work Gifts - Exact",
-    status: "ENABLED",
-    budget: 35,
-    spend: 31.6,
-    sales: 132.91,
-    impressions: 39870,
-    clicks: 1652,
-  },
-  {
-    name: "Corporate Jokes - Broad",
-    status: "PAUSED",
-    budget: 28,
-    spend: 14.2,
-    sales: 31.55,
-    impressions: 27210,
-    clicks: 973,
-  },
-  {
-    name: "Manager Memes - Exact",
-    status: "ENABLED",
-    budget: 40,
-    spend: 39.3,
-    sales: 86.46,
-    impressions: 33654,
-    clicks: 1261,
-  },
-  {
-    name: "Team Building - Phrase",
-    status: "PAUSED",
-    budget: 30,
-    spend: 22.4,
-    sales: 98.14,
-    impressions: 22418,
-    clicks: 756,
-  },
-  {
-    name: "Office Humor - Exact Match",
-    status: "ENABLED",
-    budget: 50,
-    spend: 46.9,
-    sales: 188.66,
-    impressions: 50771,
-    clicks: 2190,
-  },
-  {
-    name: "Work Gifts - Phrase",
-    status: "ARCHIVED",
-    budget: 18,
-    spend: 5.2,
-    sales: 10.03,
-    impressions: 12833,
-    clicks: 366,
-  },
-  {
-    name: "HR Humor - Auto",
-    status: "ENABLED",
-    budget: 22,
-    spend: 21.1,
-    sales: 30.58,
-    impressions: 16432,
-    clicks: 592,
-  },
+  { name: "Office Humor - Broad Match", status: "ENABLED", budget: 45, spend: 41.8, sales: 176.42, impressions: 48320, clicks: 1988 },
+  { name: "Work Gifts - Exact", status: "ENABLED", budget: 35, spend: 31.6, sales: 132.91, impressions: 39870, clicks: 1652 },
+  { name: "Corporate Jokes - Broad", status: "PAUSED", budget: 28, spend: 14.2, sales: 31.55, impressions: 27210, clicks: 973 },
+  { name: "Manager Memes - Exact", status: "ENABLED", budget: 40, spend: 39.3, sales: 86.46, impressions: 33654, clicks: 1261 },
+  { name: "Team Building - Phrase", status: "PAUSED", budget: 30, spend: 22.4, sales: 98.14, impressions: 22418, clicks: 756 },
+  { name: "Office Humor - Exact Match", status: "ENABLED", budget: 50, spend: 46.9, sales: 188.66, impressions: 50771, clicks: 2190 },
+  { name: "Work Gifts - Phrase", status: "ARCHIVED", budget: 18, spend: 5.2, sales: 10.03, impressions: 12833, clicks: 366 },
+  { name: "HR Humor - Auto", status: "ENABLED", budget: 22, spend: 21.1, sales: 30.58, impressions: 16432, clicks: 592 },
+  { name: "Startup Satire - Broad", status: "ENABLED", budget: 42, spend: 36.5, sales: 128.72, impressions: 31891, clicks: 1245 },
+  { name: "Burnout Journal - Exact", status: "ENABLED", budget: 26, spend: 24.6, sales: 73.42, impressions: 24018, clicks: 904 },
+  { name: "Promotion Gifts - Phrase", status: "PAUSED", budget: 32, spend: 17.1, sales: 48.12, impressions: 20114, clicks: 670 },
+  { name: "Team Lead Notebook - Broad", status: "ENABLED", budget: 38, spend: 34.7, sales: 102.34, impressions: 27541, clicks: 1092 },
+  { name: "Remote Work Snark - Exact", status: "ENABLED", budget: 29, spend: 25.2, sales: 83.9, impressions: 22692, clicks: 812 },
+  { name: "Office Party Gags - Phrase", status: "PAUSED", budget: 24, spend: 12.8, sales: 29.6, impressions: 17122, clicks: 521 },
+  { name: "Boss Quotes - Broad", status: "ENABLED", budget: 31, spend: 27.8, sales: 75.42, impressions: 23285, clicks: 887 },
+  { name: "Interview Humor - Exact", status: "ENABLED", budget: 27, spend: 23.4, sales: 68.37, impressions: 19654, clicks: 706 },
+  { name: "Coworker Farewell - Phrase", status: "ENABLED", budget: 34, spend: 18.4, sales: 62.19, impressions: 18742, clicks: 618 },
+  { name: "Productivity Roast - Broad", status: "ENABLED", budget: 44, spend: 39.8, sales: 121.58, impressions: 31206, clicks: 1185 },
+  { name: "Meeting Notes Sarcasm - Exact", status: "PAUSED", budget: 23, spend: 11.1, sales: 18.84, impressions: 14988, clicks: 447 },
+  { name: "Finance Team Humor - Phrase", status: "ENABLED", budget: 33, spend: 29.9, sales: 105.3, impressions: 26841, clicks: 1029 },
+  { name: "Engineer Memes - Broad", status: "ENABLED", budget: 41, spend: 35.4, sales: 96.2, impressions: 30981, clicks: 1158 },
+  { name: "Sales Team Jokes - Exact", status: "PAUSED", budget: 30, spend: 14.3, sales: 36.25, impressions: 20121, clicks: 643 },
+  { name: "Marketing Banter - Phrase", status: "ENABLED", budget: 36, spend: 31.1, sales: 87.95, impressions: 25376, clicks: 947 },
+  { name: "HR Onboarding Humor - Broad", status: "ENABLED", budget: 28, spend: 23.7, sales: 56.62, impressions: 19435, clicks: 721 },
+  { name: "Office Trivia Notebook - Exact", status: "ENABLED", budget: 39, spend: 33.8, sales: 111.4, impressions: 28413, clicks: 1068 },
 ];
 
 export const mockCampaigns: Campaign[] = campaignSeedData.map((campaign, index) => ({
@@ -141,7 +98,7 @@ export const mockCampaigns: Campaign[] = campaignSeedData.map((campaign, index) 
   today_acos: round2(calculateAcos(campaign.spend, campaign.sales)),
 }));
 
-const keywordTerms = [
+const keywordBaseTerms = [
   "office humor book",
   "funny office notebook",
   "coworker gift ideas",
@@ -150,7 +107,6 @@ const keywordTerms = [
   "boss joke book",
   "funny meeting notes",
   "corporate humor",
-  "hr funny gift",
   "team gift notebook",
   "work anniversary gag",
   "manager meme book",
@@ -158,74 +114,67 @@ const keywordTerms = [
   "office prank journal",
   "funny employee gift",
   "coffee break jokes",
-  "funny cubicle decor",
   "office white elephant",
   "burnout humor",
   "remote work jokes",
   "funny office quotes",
-  "snarky planner",
-  "desk job humor",
-  "corporate life jokes",
   "sarcastic notebook",
   "funny stationery gift",
-  "work bestie gift",
-  "coworker birthday gift",
-  "funny business book",
   "meeting survival guide",
-  "funny manager present",
-  "promotion gift joke",
   "office christmas gift",
   "team morale gift",
-  "funny hr notebook",
-  "burnout journal",
-  "office banter book",
-  "funny leadership gift",
-  "corporate meme notebook",
   "conference joke book",
-  "work stress relief book",
   "office farewell gift",
-  "funny promotion card",
-  "office gift broad",
-  "gift for boss funny",
   "office notebook exact",
   "work gift phrase",
   "kdp office humor",
   "amazon office gift",
-  "funny employee appreciation",
 ];
 
 const matchCycle: MatchType[] = ["BROAD", "PHRASE", "EXACT"];
 
-export const mockKeywords: Keyword[] = keywordTerms.map((term, index) => {
-  const campaign = mockCampaigns[index % mockCampaigns.length];
-  const baseImpressions = 340 + ((index * 73) % 2600);
-  const ctrRatio = 0.028 + (index % 6) * 0.008;
-  const clicks = Math.max(6, Math.round(baseImpressions * ctrRatio));
-  const bid = round2(0.34 + (index % 10) * 0.07 + (index % 3) * 0.03);
-  const spend = round2(clicks * bid * (0.9 + (index % 4) * 0.06));
+export const mockKeywords: Keyword[] = (() => {
+  const keywords: Keyword[] = [];
+  let keywordCounter = 1;
 
-  let salesMultiplier = 1.55 + (index % 7) * 0.35;
-  if (index % 13 === 0) {
-    salesMultiplier = 0.42;
-  } else if (index % 9 === 0 || index % 7 === 0) {
-    salesMultiplier = 6.4;
-  }
+  mockCampaigns.forEach((campaign, campaignIndex) => {
+    const keywordCount = 5 + (campaignIndex % 6);
 
-  const sales = round2(spend * salesMultiplier);
+    for (let index = 0; index < keywordCount; index += 1) {
+      const baseTerm =
+        keywordBaseTerms[(campaignIndex * 3 + index) % keywordBaseTerms.length];
+      const impressions = 300 + ((campaignIndex * 97 + index * 61) % 4800);
+      const ctrRatio = 0.02 + ((campaignIndex + index) % 8) * 0.006;
+      const clicks = Math.max(6, Math.round(impressions * ctrRatio));
+      const bid = round2(0.28 + ((campaignIndex + index) % 12) * 0.05);
+      const spend = round2(clicks * bid * (0.92 + ((campaignIndex + index) % 4) * 0.07));
 
-  return {
-    id: `kw-${index + 1}`,
-    amazonKeywordId: `${900000 + index}`,
-    campaignId: campaign.id,
-    keyword: term,
-    matchType: matchCycle[index % matchCycle.length],
-    bid,
-    spend,
-    sales,
-    impressions: baseImpressions,
-    clicks,
-  };
-});
+      let salesMultiplier = 1.6 + ((campaignIndex + index) % 6) * 0.4;
+      if ((campaignIndex + index) % 9 === 0) {
+        salesMultiplier = 5.5;
+      } else if ((campaignIndex + index) % 7 === 0) {
+        salesMultiplier = 0.85;
+      }
+
+      keywords.push({
+        id: `kw-${keywordCounter}`,
+        amazonKeywordId: `${900000 + keywordCounter}`,
+        campaignId: campaign.id,
+        keyword: `${campaign.name.split(" - ")[0].toLowerCase()} ${baseTerm}`,
+        matchType: matchCycle[(campaignIndex + index) % matchCycle.length],
+        bid,
+        spend,
+        sales: round2(spend * salesMultiplier),
+        impressions,
+        clicks,
+      });
+
+      keywordCounter += 1;
+    }
+  });
+
+  return keywords;
+})();
 
 export const mockDailyReports: DailyReport[] = Array.from(
   { length: 30 },
@@ -328,7 +277,13 @@ const mockAutomationLogBase: AutomationLogEntry[] = Array.from(
       today_acos: round2(Math.max(baseAcos, 0)),
       acos_target: 30,
       acos_threshold: 40,
-      reason: buildReason(action, Math.max(baseUtil, 0), Math.max(baseAcos, 0), baseBudget, newBudget),
+      reason: buildReason(
+        action,
+        Math.max(baseUtil, 0),
+        Math.max(baseAcos, 0),
+        baseBudget,
+        newBudget,
+      ),
       approved_at: new Date(Date.now() - (index + 1) * 60 * 60 * 1000).toISOString(),
       approved: true,
       created_at: createdAt,

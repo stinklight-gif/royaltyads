@@ -18,6 +18,12 @@ import {
 
 const AMAZON_BASE_URL = "https://advertising-api.amazon.com";
 const AMAZON_AUTH_URL = "https://api.amazon.com/auth/o2/token";
+const DEFAULT_PAGE_SIZE = 50;
+
+interface CampaignQueryOptions {
+  limit?: number;
+  offset?: number;
+}
 
 type StoredCredentials = Pick<
   AdSettings,
@@ -38,6 +44,7 @@ const mockLogMap = new Map(
 );
 
 const normalize = (value?: string | null) => value?.trim() ?? "";
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const hasCredentials = (
   settings: StoredCredentials | null,
@@ -188,15 +195,24 @@ export const isDemoMode = async (): Promise<boolean> => {
   return !hasCredentials(settings);
 };
 
-export const getCampaigns = async (): Promise<Campaign[]> => {
+export const getCampaigns = async (
+  options: CampaignQueryOptions = {},
+): Promise<Campaign[]> => {
+  const limit = Math.max(1, options.limit ?? DEFAULT_PAGE_SIZE);
+  const offset = Math.max(0, options.offset ?? 0);
+
+  const sortedMockCampaigns = [...mockCampaignMap.values()].sort((a, b) =>
+    a.id.localeCompare(b.id),
+  );
+
   const settings = await loadStoredCredentials();
   if (!hasCredentials(settings)) {
-    return [...mockCampaignMap.values()];
+    return sortedMockCampaigns.slice(offset, offset + limit);
   }
 
   const accessToken = await refreshAccessToken(settings);
   if (!accessToken) {
-    return [...mockCampaignMap.values()];
+    return sortedMockCampaigns.slice(offset, offset + limit);
   }
 
   type CampaignResponse = { campaigns?: Array<Record<string, unknown>> };
@@ -210,27 +226,75 @@ export const getCampaigns = async (): Promise<Campaign[]> => {
         stateFilter: {
           include: ["ENABLED", "PAUSED", "ARCHIVED"],
         },
+        count: limit,
+        startIndex: offset,
       }),
     },
   );
 
   const liveCampaigns = payload?.campaigns;
   if (!Array.isArray(liveCampaigns) || liveCampaigns.length === 0) {
-    return [...mockCampaignMap.values()];
+    return sortedMockCampaigns.slice(offset, offset + limit);
   }
 
-  return liveCampaigns.map(mapCampaign);
+  const mapped = liveCampaigns.map(mapCampaign);
+  if (mapped.length > limit) {
+    return mapped.slice(offset, offset + limit);
+  }
+
+  return mapped;
 };
 
-export const getKeywords = async (): Promise<Keyword[]> => {
+export const getAllCampaignsBatched = async (): Promise<Campaign[]> => {
+  const pageSize = DEFAULT_PAGE_SIZE;
+  const allCampaigns: Campaign[] = [];
+  const seenCampaignIds = new Set<string>();
+  const maxBatches = 200;
+  let offset = 0;
+
+  for (let batchIndex = 0; batchIndex < maxBatches; batchIndex += 1) {
+    const batch = await getCampaigns({ limit: pageSize, offset });
+    if (batch.length === 0) {
+      break;
+    }
+
+    const uniqueBatch = batch.filter((campaign) => !seenCampaignIds.has(campaign.id));
+    uniqueBatch.forEach((campaign) => seenCampaignIds.add(campaign.id));
+
+    if (uniqueBatch.length === 0) {
+      break;
+    }
+
+    allCampaigns.push(...uniqueBatch);
+
+    if (uniqueBatch.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
+    await sleep(200);
+  }
+
+  return allCampaigns;
+};
+
+export const getKeywords = async (campaignId?: string): Promise<Keyword[]> => {
+  if (!campaignId) {
+    return [];
+  }
+
+  const filteredMockKeywords = [...mockKeywordMap.values()].filter(
+    (keyword) => keyword.campaignId === campaignId,
+  );
+
   const settings = await loadStoredCredentials();
   if (!hasCredentials(settings)) {
-    return [...mockKeywordMap.values()];
+    return filteredMockKeywords;
   }
 
   const accessToken = await refreshAccessToken(settings);
   if (!accessToken) {
-    return [...mockKeywordMap.values()];
+    return filteredMockKeywords;
   }
 
   type KeywordResponse = { keywords?: Array<Record<string, unknown>> };
@@ -241,6 +305,9 @@ export const getKeywords = async (): Promise<Keyword[]> => {
       method: "POST",
       headers: buildAmazonHeaders(settings, accessToken),
       body: JSON.stringify({
+        campaignIdFilter: {
+          include: [campaignId],
+        },
         stateFilter: {
           include: ["ENABLED", "PAUSED"],
         },
@@ -250,10 +317,12 @@ export const getKeywords = async (): Promise<Keyword[]> => {
 
   const liveKeywords = payload?.keywords;
   if (!Array.isArray(liveKeywords) || liveKeywords.length === 0) {
-    return [...mockKeywordMap.values()];
+    return filteredMockKeywords;
   }
 
-  return liveKeywords.map(mapKeyword);
+  return liveKeywords
+    .map(mapKeyword)
+    .filter((keyword) => keyword.campaignId === campaignId);
 };
 
 export const getReports = async (): Promise<DailyReport[]> => {

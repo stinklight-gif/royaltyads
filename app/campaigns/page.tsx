@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { getCampaigns } from "@/lib/amazon-ads/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -21,13 +23,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import {
-  calculateAcos,
-  calculateCtr,
-  calculateRoas,
-  mockCampaigns,
-} from "@/lib/mock-data";
-import { CampaignStatus } from "@/lib/types";
+import { calculateAcos, calculateCtr, calculateRoas } from "@/lib/mock-data";
+import { Campaign, CampaignStatus } from "@/lib/types";
+
+const PAGE_SIZE = 50;
 
 type StatusFilter = "ALL" | CampaignStatus;
 
@@ -38,27 +37,93 @@ const statusBadgeClass: Record<CampaignStatus, string> = {
 };
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState(mockCampaigns);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadCampaigns = async () => {
+      setCampaignsLoading(true);
+      const allCampaigns: Campaign[] = [];
+      const seenCampaignIds = new Set<string>();
+      let offset = 0;
+
+      for (let batchIndex = 0; batchIndex < 200; batchIndex += 1) {
+        const batch = await getCampaigns({ limit: PAGE_SIZE, offset });
+        if (batch.length === 0) {
+          break;
+        }
+
+        const uniqueBatch = batch.filter((campaign) => !seenCampaignIds.has(campaign.id));
+        uniqueBatch.forEach((campaign) => seenCampaignIds.add(campaign.id));
+
+        if (uniqueBatch.length === 0) {
+          break;
+        }
+
+        allCampaigns.push(...uniqueBatch);
+
+        if (uniqueBatch.length < PAGE_SIZE) {
+          break;
+        }
+
+        offset += PAGE_SIZE;
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setCampaigns(allCampaigns);
+      setCampaignsLoading(false);
+    };
+
+    void loadCampaigns();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchTerm]);
 
   const filteredCampaigns = useMemo(() => {
-    if (statusFilter === "ALL") {
-      return campaigns;
+    const statusFiltered =
+      statusFilter === "ALL"
+        ? campaigns
+        : campaigns.filter((campaign) => campaign.status === statusFilter);
+
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) {
+      return statusFiltered;
     }
 
-    return campaigns.filter((campaign) => campaign.status === statusFilter);
-  }, [campaigns, statusFilter]);
+    return statusFiltered.filter((campaign) =>
+      campaign.name.toLowerCase().includes(query),
+    );
+  }, [campaigns, searchTerm, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredCampaigns.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * PAGE_SIZE;
+  const paginatedCampaigns = filteredCampaigns.slice(pageStart, pageStart + PAGE_SIZE);
 
   const allVisibleSelected =
-    filteredCampaigns.length > 0 &&
-    filteredCampaigns.every((campaign) => selectedIds.has(campaign.id));
+    paginatedCampaigns.length > 0 &&
+    paginatedCampaigns.every((campaign) => selectedIds.has(campaign.id));
 
   const toggleSelectAll = (checked: boolean) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
 
-      filteredCampaigns.forEach((campaign) => {
+      paginatedCampaigns.forEach((campaign) => {
         if (checked) {
           next.add(campaign.id);
         } else {
@@ -137,10 +202,15 @@ export default function CampaignsPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
+        <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <CardTitle className="text-base">All Campaigns</CardTitle>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Status Filter</span>
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
+            <Input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search campaigns by name"
+              className="w-full md:w-64"
+            />
             <Select
               value={statusFilter}
               onValueChange={(value) => setStatusFilter(value as StatusFilter)}
@@ -157,94 +227,124 @@ export default function CampaignsPage() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10">
-                  <input
-                    aria-label="Select all campaigns"
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
-                    checked={allVisibleSelected}
-                    onChange={(event) => toggleSelectAll(event.target.checked)}
-                  />
-                </TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Budget</TableHead>
-                <TableHead className="text-right">Spend</TableHead>
-                <TableHead className="text-right">Sales</TableHead>
-                <TableHead className="text-right">ACoS</TableHead>
-                <TableHead className="text-right">ROAS</TableHead>
-                <TableHead className="text-right">Impressions</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">CTR</TableHead>
-                <TableHead className="text-right">Action</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCampaigns.map((campaign) => {
-                const acos = calculateAcos(campaign.spend, campaign.sales);
-                const roas = calculateRoas(campaign.spend, campaign.sales);
-                const ctr = calculateCtr(campaign.clicks, campaign.impressions);
-                const selected = selectedIds.has(campaign.id);
-
-                return (
-                  <TableRow key={campaign.id} data-state={selected ? "selected" : "none"}>
-                    <TableCell>
+        <CardContent className="space-y-4">
+          {campaignsLoading ? (
+            <p className="text-sm text-zinc-400">Loading campaigns...</p>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">
                       <input
-                        aria-label={`Select ${campaign.name}`}
+                        aria-label="Select all campaigns"
                         type="checkbox"
                         className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
-                        checked={selected}
-                        onChange={(event) =>
-                          toggleRowSelection(campaign.id, event.target.checked)
-                        }
+                        checked={allVisibleSelected}
+                        onChange={(event) => toggleSelectAll(event.target.checked)}
                       />
-                    </TableCell>
-                    <TableCell className="font-medium">{campaign.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={statusBadgeClass[campaign.status]}>
-                        {campaign.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(campaign.budget)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(campaign.spend)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(campaign.sales)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatPercent(acos)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">{roas.toFixed(2)}x</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {campaign.impressions.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {campaign.clicks.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatPercent(ctr)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleCampaignStatus(campaign.id)}
-                      >
-                        {campaign.status === "ENABLED" ? "Pause" : "Enable"}
-                      </Button>
-                    </TableCell>
+                    </TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Budget</TableHead>
+                    <TableHead className="text-right">Spend</TableHead>
+                    <TableHead className="text-right">Sales</TableHead>
+                    <TableHead className="text-right">ACoS</TableHead>
+                    <TableHead className="text-right">ROAS</TableHead>
+                    <TableHead className="text-right">Impressions</TableHead>
+                    <TableHead className="text-right">Clicks</TableHead>
+                    <TableHead className="text-right">CTR</TableHead>
+                    <TableHead className="text-right">Action</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+                </TableHeader>
+                <TableBody>
+                  {paginatedCampaigns.map((campaign) => {
+                    const acos = calculateAcos(campaign.spend, campaign.sales);
+                    const roas = calculateRoas(campaign.spend, campaign.sales);
+                    const ctr = calculateCtr(campaign.clicks, campaign.impressions);
+                    const selected = selectedIds.has(campaign.id);
+
+                    return (
+                      <TableRow key={campaign.id} data-state={selected ? "selected" : "none"}>
+                        <TableCell>
+                          <input
+                            aria-label={`Select ${campaign.name}`}
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
+                            checked={selected}
+                            onChange={(event) =>
+                              toggleRowSelection(campaign.id, event.target.checked)
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">{campaign.name}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={statusBadgeClass[campaign.status]}>
+                            {campaign.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(campaign.budget)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(campaign.spend)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(campaign.sales)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatPercent(acos)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">{roas.toFixed(2)}x</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {campaign.impressions.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {campaign.clicks.toLocaleString()}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatPercent(ctr)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => toggleCampaignStatus(campaign.id)}
+                          >
+                            {campaign.status === "ENABLED" ? "Pause" : "Enable"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-800 pt-3">
+                <p className="text-xs text-zinc-400">Page {safePage} of {totalPages}</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={safePage <= 1}
+                    onClick={() => setPage((previous) => Math.max(1, previous - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={safePage >= totalPages}
+                    onClick={() =>
+                      setPage((previous) => Math.min(totalPages, previous + 1))
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getCampaigns, updateBudget } from "@/lib/amazon-ads/client";
+import { getAllCampaignsBatched, updateBudget } from "@/lib/amazon-ads/client";
 import { DEFAULT_AUTOMATION_SETTINGS, normalizeAdSettings } from "@/lib/automation";
 import { calculateAcos, calculateBudgetUtilization } from "@/lib/mock-data";
 import { getSupabaseClient } from "@/lib/supabase/client";
@@ -13,6 +13,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const loadSettings = async (): Promise<AdSettings> => {
   try {
@@ -69,7 +70,7 @@ export async function GET() {
     });
   }
 
-  const campaigns = (await getCampaigns()).filter(
+  const campaigns = (await getAllCampaignsBatched()).filter(
     (campaign) => campaign.status === "ENABLED",
   );
 
@@ -85,97 +86,118 @@ export async function GET() {
     update_errors: 0,
   };
 
-  for (const campaign of campaigns) {
-    summary.evaluated += 1;
+  const batchSize = 50;
+  const totalBatches = Math.ceil(campaigns.length / batchSize);
 
-    const oldBudget = round2(campaign.budget);
-    const budgetUtilization = round2(
-      campaign.budget_utilization ||
-        calculateBudgetUtilization(campaign.spend, campaign.budget),
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex += 1) {
+    const start = batchIndex * batchSize;
+    const end = Math.min(start + batchSize, campaigns.length);
+    const batch = campaigns.slice(start, end);
+
+    console.log(
+      `Processing batch ${batchIndex + 1}/${totalBatches} (campaigns ${start + 1}-${end})`,
     );
-    const todayAcos = round2(
-      campaign.today_acos || calculateAcos(campaign.spend, campaign.sales),
-    );
 
-    let action: AutomationAction = "no_action";
-    let ruleTriggered: AutomationRuleTriggered = null;
-    let newBudget = oldBudget;
-    let reason = `No rules triggered. Util ${budgetUtilization.toFixed(2)}%, ACoS ${todayAcos.toFixed(2)}%.`;
-    let approved = settings.automation_mode === "auto";
-    let approvedAt: string | null = settings.automation_mode === "auto" ? new Date().toISOString() : null;
+    for (const campaign of batch) {
+      summary.evaluated += 1;
 
-    if (budgetUtilization > 80 && todayAcos < settings.target_acos) {
-      ruleTriggered = "scale_up";
-      newBudget = round2(
-        Math.min(oldBudget * (1 + settings.scale_up_pct / 100), oldBudget * 2),
+      const oldBudget = round2(campaign.budget);
+      const budgetUtilization = round2(
+        campaign.budget_utilization ||
+          calculateBudgetUtilization(campaign.spend, campaign.budget),
       );
-      reason = `Budget util ${budgetUtilization.toFixed(2)}% > 80% and ACoS ${todayAcos.toFixed(2)}% < target ${settings.target_acos.toFixed(2)}%.`;
-
-      if (settings.automation_mode === "approval") {
-        action = "pending_increase";
-        approved = false;
-        approvedAt = null;
-        summary.pending_increase += 1;
-      } else {
-        action = "increase";
-        summary.increased += 1;
-        const updatedCampaign = await updateBudget(campaign.id, newBudget);
-        if (!updatedCampaign) {
-          summary.update_errors += 1;
-          reason += " Budget update failed.";
-        }
-      }
-    } else if (todayAcos > settings.acos_threshold) {
-      ruleTriggered = "scale_down";
-      newBudget = round2(
-        Math.max(oldBudget * (1 - settings.scale_down_pct / 100), settings.budget_floor),
+      const todayAcos = round2(
+        campaign.today_acos || calculateAcos(campaign.spend, campaign.sales),
       );
-      reason = `ACoS ${todayAcos.toFixed(2)}% > threshold ${settings.acos_threshold.toFixed(2)}%.`;
 
-      if (settings.automation_mode === "approval") {
-        action = "pending_decrease";
-        approved = false;
-        approvedAt = null;
-        summary.pending_decrease += 1;
-      } else {
-        action = newBudget <= settings.budget_floor ? "skipped_floor" : "decrease";
-        if (action === "skipped_floor") {
-          reason += ` Budget held at floor ${settings.budget_floor.toFixed(2)}.`;
-          summary.skipped_floor += 1;
+      let action: AutomationAction = "no_action";
+      let ruleTriggered: AutomationRuleTriggered = null;
+      let newBudget = oldBudget;
+      let reason = `No rules triggered. Util ${budgetUtilization.toFixed(2)}%, ACoS ${todayAcos.toFixed(2)}%.`;
+      let approved = settings.automation_mode === "auto";
+      let approvedAt: string | null =
+        settings.automation_mode === "auto" ? new Date().toISOString() : null;
+
+      if (budgetUtilization > 80 && todayAcos < settings.target_acos) {
+        ruleTriggered = "scale_up";
+        newBudget = round2(
+          Math.min(oldBudget * (1 + settings.scale_up_pct / 100), oldBudget * 2),
+        );
+        reason = `Budget util ${budgetUtilization.toFixed(2)}% > 80% and ACoS ${todayAcos.toFixed(2)}% < target ${settings.target_acos.toFixed(2)}%.`;
+
+        if (settings.automation_mode === "approval") {
+          action = "pending_increase";
+          approved = false;
+          approvedAt = null;
+          summary.pending_increase += 1;
         } else {
-          summary.decreased += 1;
+          action = "increase";
+          summary.increased += 1;
+          const updatedCampaign = await updateBudget(campaign.id, newBudget);
+          if (!updatedCampaign) {
+            summary.update_errors += 1;
+            reason += " Budget update failed.";
+          }
         }
+      } else if (todayAcos > settings.acos_threshold) {
+        ruleTriggered = "scale_down";
+        newBudget = round2(
+          Math.max(
+            oldBudget * (1 - settings.scale_down_pct / 100),
+            settings.budget_floor,
+          ),
+        );
+        reason = `ACoS ${todayAcos.toFixed(2)}% > threshold ${settings.acos_threshold.toFixed(2)}%.`;
 
-        const updatedCampaign = await updateBudget(campaign.id, newBudget);
-        if (!updatedCampaign) {
-          summary.update_errors += 1;
-          reason += " Budget update failed.";
+        if (settings.automation_mode === "approval") {
+          action = "pending_decrease";
+          approved = false;
+          approvedAt = null;
+          summary.pending_decrease += 1;
+        } else {
+          action = newBudget <= settings.budget_floor ? "skipped_floor" : "decrease";
+          if (action === "skipped_floor") {
+            reason += ` Budget held at floor ${settings.budget_floor.toFixed(2)}.`;
+            summary.skipped_floor += 1;
+          } else {
+            summary.decreased += 1;
+          }
+
+          const updatedCampaign = await updateBudget(campaign.id, newBudget);
+          if (!updatedCampaign) {
+            summary.update_errors += 1;
+            reason += " Budget update failed.";
+          }
+        }
+      } else {
+        summary.no_action += 1;
+        if (settings.automation_mode === "approval") {
+          approved = true;
+          approvedAt = new Date().toISOString();
         }
       }
-    } else {
-      summary.no_action += 1;
-      if (settings.automation_mode === "approval") {
-        approved = true;
-        approvedAt = new Date().toISOString();
-      }
+
+      logs.push({
+        campaign_id: campaign.id,
+        campaign_name: campaign.name,
+        action,
+        rule_triggered: ruleTriggered,
+        old_budget: oldBudget,
+        new_budget: newBudget,
+        budget_utilization: budgetUtilization,
+        today_acos: todayAcos,
+        acos_target: settings.target_acos,
+        acos_threshold: settings.acos_threshold,
+        reason,
+        approved,
+        approved_at: approvedAt,
+        created_at: new Date().toISOString(),
+      });
     }
 
-    logs.push({
-      campaign_id: campaign.id,
-      campaign_name: campaign.name,
-      action,
-      rule_triggered: ruleTriggered,
-      old_budget: oldBudget,
-      new_budget: newBudget,
-      budget_utilization: budgetUtilization,
-      today_acos: todayAcos,
-      acos_target: settings.target_acos,
-      acos_threshold: settings.acos_threshold,
-      reason,
-      approved,
-      approved_at: approvedAt,
-      created_at: new Date().toISOString(),
-    });
+    if (batchIndex < totalBatches - 1) {
+      await sleep(200);
+    }
   }
 
   let insertError: { message: string } | null = null;
