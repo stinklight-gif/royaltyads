@@ -10,6 +10,7 @@ const navItems = [
   { href: "/campaigns", label: "Campaigns" },
   { href: "/optimizer", label: "Bid Optimizer" },
   { href: "/keywords", label: "Keywords" },
+  { href: "/activity", label: "Activity Log" },
   { href: "/settings", label: "Settings" },
 ];
 

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { SidebarNav } from "@/components/sidebar-nav";
+import { Sidebar } from "@/components/sidebar";
 import { isDemoMode } from "@/lib/amazon-ads/client";
 import { DEMO_BANNER_TEXT } from "@/lib/mock-data";
 
@@ -29,7 +29,7 @@ export default async function RootLayout({
               </h1>
               <p className="mt-1 text-xs text-zinc-500">Amazon KDP automation</p>
             </div>
-            <SidebarNav />
+            <Sidebar />
           </aside>
 
           <div className="ml-64 min-h-screen bg-[#050608]">

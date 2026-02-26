@@ -1,10 +1,20 @@
 import {
+  calculateAcos,
+  calculateBudgetUtilization,
+  mockAutomationLog,
   mockCampaigns,
   mockDailyReports,
   mockKeywords,
 } from "@/lib/mock-data";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { AdSettings, Campaign, CampaignStatus, DailyReport, Keyword } from "@/lib/types";
+import {
+  AdSettings,
+  AutomationLogEntry,
+  Campaign,
+  CampaignStatus,
+  DailyReport,
+  Keyword,
+} from "@/lib/types";
 
 const AMAZON_BASE_URL = "https://advertising-api.amazon.com";
 const AMAZON_AUTH_URL = "https://api.amazon.com/auth/o2/token";
@@ -17,12 +27,21 @@ type StoredCredentials = Pick<
   | "amazon_profile_id"
 >;
 
-const mockCampaignMap = new Map(mockCampaigns.map((campaign) => [campaign.id, { ...campaign }]));
-const mockKeywordMap = new Map(mockKeywords.map((keyword) => [keyword.id, { ...keyword }]));
+const mockCampaignMap = new Map(
+  mockCampaigns.map((campaign) => [campaign.id, { ...campaign }]),
+);
+const mockKeywordMap = new Map(
+  mockKeywords.map((keyword) => [keyword.id, { ...keyword }]),
+);
+const mockLogMap = new Map(
+  mockAutomationLog.map((entry) => [entry.id, { ...entry }]),
+);
 
 const normalize = (value?: string | null) => value?.trim() ?? "";
 
-const hasCredentials = (settings: StoredCredentials | null): settings is StoredCredentials => {
+const hasCredentials = (
+  settings: StoredCredentials | null,
+): settings is StoredCredentials => {
   if (!settings) {
     return false;
   }
@@ -93,7 +112,10 @@ const refreshAccessToken = async (
   }
 };
 
-const fetchAmazonJson = async <T>(url: string, init: RequestInit): Promise<T | null> => {
+const fetchAmazonJson = async <T>(
+  url: string,
+  init: RequestInit,
+): Promise<T | null> => {
   try {
     const response = await fetch(url, {
       ...init,
@@ -118,6 +140,7 @@ const buildAmazonHeaders = (settings: StoredCredentials, accessToken: string) =>
 });
 
 const mapCampaign = (raw: Record<string, unknown>, index: number): Campaign => {
+  const budget = Number(raw.dailyBudget) || Number(raw.budget) || 0;
   const spend = Number(raw.spend) || Number(raw.cost) || 0;
   const sales = Number(raw.sales) || Number(raw.revenue) || 0;
   const impressions = Number(raw.impressions) || 0;
@@ -128,11 +151,15 @@ const mapCampaign = (raw: Record<string, unknown>, index: number): Campaign => {
     amazonCampaignId: String(raw.campaignId ?? raw.id ?? `live-cmp-${index}`),
     name: String(raw.name ?? `Live Campaign ${index + 1}`),
     status: String(raw.state ?? raw.status ?? "ENABLED") as CampaignStatus,
-    budget: Number(raw.dailyBudget) || Number(raw.budget) || 0,
+    budget,
     spend,
     sales,
     impressions,
     clicks,
+    budget_utilization:
+      Number(raw.budget_utilization) ||
+      calculateBudgetUtilization(spend, budget),
+    today_acos: Number(raw.today_acos) || calculateAcos(spend, sales),
   };
 };
 
@@ -241,7 +268,12 @@ export const getReports = async (): Promise<DailyReport[]> => {
   }
 
   type ReportResponse = {
-    rows?: Array<{ date?: string; spend?: number; sales?: number; revenue?: number }>;
+    rows?: Array<{
+      date?: string;
+      spend?: number;
+      sales?: number;
+      revenue?: number;
+    }>;
   };
 
   const payload = await fetchAmazonJson<ReportResponse>(
@@ -322,6 +354,63 @@ export const updateBid = async (
   return updatedKeyword;
 };
 
+export const updateBudget = async (
+  campaignId: string,
+  newBudget: number,
+): Promise<Campaign | null> => {
+  const existingCampaign =
+    mockCampaignMap.get(campaignId) ||
+    [...mockCampaignMap.values()].find(
+      (campaign) => campaign.amazonCampaignId === campaignId,
+    );
+
+  const patchCampaign = (target: Campaign) => {
+    const updatedCampaign: Campaign = {
+      ...target,
+      budget: newBudget,
+      budget_utilization: calculateBudgetUtilization(target.spend, newBudget),
+      today_acos: target.today_acos || calculateAcos(target.spend, target.sales),
+    };
+
+    mockCampaignMap.set(updatedCampaign.id, updatedCampaign);
+    return updatedCampaign;
+  };
+
+  const settings = await loadStoredCredentials();
+  if (!hasCredentials(settings)) {
+    if (!existingCampaign) {
+      return null;
+    }
+
+    return patchCampaign(existingCampaign);
+  }
+
+  const accessToken = await refreshAccessToken(settings);
+  if (!accessToken) {
+    return existingCampaign ?? null;
+  }
+
+  const response = await fetchAmazonJson<Record<string, unknown>>(
+    `${AMAZON_BASE_URL}/sp/campaigns`,
+    {
+      method: "PUT",
+      headers: buildAmazonHeaders(settings, accessToken),
+      body: JSON.stringify([
+        {
+          campaignId,
+          dailyBudget: newBudget,
+        },
+      ]),
+    },
+  );
+
+  if (!response || !existingCampaign) {
+    return existingCampaign ?? null;
+  }
+
+  return patchCampaign(existingCampaign);
+};
+
 export const toggleCampaign = async (
   campaignId: string,
   status: CampaignStatus,
@@ -362,17 +451,16 @@ export const toggleCampaign = async (
     },
   );
 
-  if (!response) {
+  if (!response || !existingCampaign) {
     return existingCampaign ?? null;
-  }
-
-  if (!existingCampaign) {
-    return null;
   }
 
   const updatedCampaign = { ...existingCampaign, status };
   mockCampaignMap.set(updatedCampaign.id, updatedCampaign);
   return updatedCampaign;
 };
+
+export const getAutomationLogFallback = (): AutomationLogEntry[] =>
+  [...mockLogMap.values()].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 
 export { AMAZON_AUTH_URL, AMAZON_BASE_URL };

@@ -1,9 +1,54 @@
-import { Campaign, CampaignStatus, DailyReport, Keyword, MatchType } from "@/lib/types";
+import {
+  AutomationAction,
+  AutomationLogEntry,
+  AutomationRuleTriggered,
+  Campaign,
+  CampaignStatus,
+  DailyReport,
+  Keyword,
+  MatchType,
+} from "@/lib/types";
 
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export const DEMO_BANNER_TEXT =
   "Demo mode — connect Amazon Ads API in Settings to go live";
+
+export const calculateBudgetUtilization = (spend: number, budget: number): number => {
+  if (budget <= 0) {
+    return 0;
+  }
+
+  return (spend / budget) * 100;
+};
+
+export const calculateAcos = (spend: number, sales: number): number => {
+  if (sales <= 0) {
+    return 0;
+  }
+  return (spend / sales) * 100;
+};
+
+export const calculateRoas = (spend: number, sales: number): number => {
+  if (spend <= 0) {
+    return 0;
+  }
+  return sales / spend;
+};
+
+export const calculateCtr = (clicks: number, impressions: number): number => {
+  if (impressions <= 0) {
+    return 0;
+  }
+  return (clicks / impressions) * 100;
+};
+
+export const calculateCpc = (spend: number, clicks: number): number => {
+  if (clicks <= 0) {
+    return 0;
+  }
+  return spend / clicks;
+};
 
 const campaignSeedData: Array<{
   name: string;
@@ -18,8 +63,8 @@ const campaignSeedData: Array<{
     name: "Office Humor - Broad Match",
     status: "ENABLED",
     budget: 45,
-    spend: 682.14,
-    sales: 2412.77,
+    spend: 41.8,
+    sales: 176.42,
     impressions: 48320,
     clicks: 1988,
   },
@@ -27,8 +72,8 @@ const campaignSeedData: Array<{
     name: "Work Gifts - Exact",
     status: "ENABLED",
     budget: 35,
-    spend: 532.43,
-    sales: 1961.18,
+    spend: 31.6,
+    sales: 132.91,
     impressions: 39870,
     clicks: 1652,
   },
@@ -36,8 +81,8 @@ const campaignSeedData: Array<{
     name: "Corporate Jokes - Broad",
     status: "PAUSED",
     budget: 28,
-    spend: 314.85,
-    sales: 611.42,
+    spend: 14.2,
+    sales: 31.55,
     impressions: 27210,
     clicks: 973,
   },
@@ -45,8 +90,8 @@ const campaignSeedData: Array<{
     name: "Manager Memes - Exact",
     status: "ENABLED",
     budget: 40,
-    spend: 446.21,
-    sales: 1758.36,
+    spend: 39.3,
+    sales: 86.46,
     impressions: 33654,
     clicks: 1261,
   },
@@ -54,8 +99,8 @@ const campaignSeedData: Array<{
     name: "Team Building - Phrase",
     status: "PAUSED",
     budget: 30,
-    spend: 271.66,
-    sales: 703.92,
+    spend: 22.4,
+    sales: 98.14,
     impressions: 22418,
     clicks: 756,
   },
@@ -63,8 +108,8 @@ const campaignSeedData: Array<{
     name: "Office Humor - Exact Match",
     status: "ENABLED",
     budget: 50,
-    spend: 724.88,
-    sales: 2824.55,
+    spend: 46.9,
+    sales: 188.66,
     impressions: 50771,
     clicks: 2190,
   },
@@ -72,8 +117,8 @@ const campaignSeedData: Array<{
     name: "Work Gifts - Phrase",
     status: "ARCHIVED",
     budget: 18,
-    spend: 112.07,
-    sales: 205.12,
+    spend: 5.2,
+    sales: 10.03,
     impressions: 12833,
     clicks: 366,
   },
@@ -81,8 +126,8 @@ const campaignSeedData: Array<{
     name: "HR Humor - Auto",
     status: "ENABLED",
     budget: 22,
-    spend: 188.91,
-    sales: 934.81,
+    spend: 21.1,
+    sales: 30.58,
     impressions: 16432,
     clicks: 592,
   },
@@ -92,6 +137,8 @@ export const mockCampaigns: Campaign[] = campaignSeedData.map((campaign, index) 
   id: `cmp-${index + 1}`,
   amazonCampaignId: `${100000 + index}`,
   ...campaign,
+  budget_utilization: round2(calculateBudgetUtilization(campaign.spend, campaign.budget)),
+  today_acos: round2(calculateAcos(campaign.spend, campaign.sales)),
 }));
 
 const keywordTerms = [
@@ -202,30 +249,87 @@ export const mockDailyReports: DailyReport[] = Array.from(
   },
 );
 
-export const calculateAcos = (spend: number, sales: number): number => {
-  if (sales <= 0) {
-    return 0;
+const actionPattern: AutomationAction[] = [
+  "increase",
+  "no_action",
+  "decrease",
+  "increase",
+  "no_action",
+  "skipped_floor",
+];
+
+const buildReason = (
+  action: AutomationAction,
+  util: number,
+  acos: number,
+  oldBudget: number,
+  newBudget: number,
+) => {
+  if (action === "increase") {
+    return `Budget util ${util.toFixed(1)}% > 80% and ACoS ${acos.toFixed(
+      1,
+    )}% below target. Increased budget from $${oldBudget.toFixed(2)} to $${newBudget.toFixed(
+      2,
+    )}.`;
   }
-  return (spend / sales) * 100;
+
+  if (action === "decrease") {
+    return `ACoS ${acos.toFixed(1)}% exceeded threshold. Reduced budget from $${oldBudget.toFixed(
+      2,
+    )} to $${newBudget.toFixed(2)}.`;
+  }
+
+  if (action === "skipped_floor") {
+    return `ACoS ${acos.toFixed(1)}% exceeded threshold but budget hit floor at $${newBudget.toFixed(
+      2,
+    )}.`;
+  }
+
+  return `No rules triggered. Util ${util.toFixed(1)}%, ACoS ${acos.toFixed(1)}%.`;
 };
 
-export const calculateRoas = (spend: number, sales: number): number => {
-  if (spend <= 0) {
-    return 0;
-  }
-  return sales / spend;
-};
+export const mockAutomationLog: AutomationLogEntry[] = Array.from(
+  { length: 24 },
+  (_, index) => {
+    const campaign = mockCampaigns[index % mockCampaigns.length];
+    const action = actionPattern[index % actionPattern.length];
 
-export const calculateCtr = (clicks: number, impressions: number): number => {
-  if (impressions <= 0) {
-    return 0;
-  }
-  return (clicks / impressions) * 100;
-};
+    const baseBudget = round2(campaign.budget * (0.9 + ((index % 5) * 0.04)));
+    const baseUtil = round2(campaign.budget_utilization + ((index % 4) * 3 - 4));
+    const baseAcos = round2(campaign.today_acos + ((index % 5) * 2.2 - 3.5));
 
-export const calculateCpc = (spend: number, clicks: number): number => {
-  if (clicks <= 0) {
-    return 0;
-  }
-  return spend / clicks;
-};
+    let newBudget = baseBudget;
+    if (action === "increase") {
+      newBudget = round2(baseBudget * 1.2);
+    } else if (action === "decrease") {
+      newBudget = round2(Math.max(baseBudget * 0.85, 5));
+    } else if (action === "skipped_floor") {
+      newBudget = 5;
+    }
+
+    const ruleTriggered: AutomationRuleTriggered =
+      action === "increase"
+        ? "scale_up"
+        : action === "decrease" || action === "skipped_floor"
+          ? "scale_down"
+          : null;
+
+    const createdAt = new Date(Date.now() - index * 60 * 60 * 1000).toISOString();
+
+    return {
+      id: `log-${index + 1}`,
+      campaign_id: campaign.id,
+      campaign_name: campaign.name,
+      action,
+      rule_triggered: ruleTriggered,
+      old_budget: baseBudget,
+      new_budget: newBudget,
+      budget_utilization: round2(Math.max(baseUtil, 0)),
+      today_acos: round2(Math.max(baseAcos, 0)),
+      acos_target: 30,
+      acos_threshold: 40,
+      reason: buildReason(action, Math.max(baseUtil, 0), Math.max(baseAcos, 0), baseBudget, newBudget),
+      created_at: createdAt,
+    };
+  },
+).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));

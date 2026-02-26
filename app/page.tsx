@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import {
   Line,
   LineChart,
@@ -25,9 +26,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { DEFAULT_AUTOMATION_SETTINGS, normalizeAdSettings } from "@/lib/automation";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import { calculateAcos, calculateRoas, mockCampaigns, mockDailyReports } from "@/lib/mock-data";
-import { CampaignStatus } from "@/lib/types";
+import {
+  calculateAcos,
+  calculateRoas,
+  mockAutomationLog,
+  mockCampaigns,
+  mockDailyReports,
+} from "@/lib/mock-data";
+import { getSupabaseClient } from "@/lib/supabase/client";
+import { AdSettings, AutomationAction, AutomationLogEntry, CampaignStatus } from "@/lib/types";
 
 const statusBadgeClass: Record<CampaignStatus, string> = {
   ENABLED: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
@@ -35,15 +44,104 @@ const statusBadgeClass: Record<CampaignStatus, string> = {
   ARCHIVED: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
 };
 
+const actionBadgeClass: Record<AutomationAction, string> = {
+  increase: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+  decrease: "bg-red-500/20 text-red-300 border-red-500/40",
+  skipped_floor: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40",
+  no_action: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40",
+};
+
+const mapLog = (entry: Partial<AutomationLogEntry>): AutomationLogEntry => ({
+  id: String(entry.id ?? crypto.randomUUID()),
+  campaign_id: String(entry.campaign_id ?? ""),
+  campaign_name: String(entry.campaign_name ?? "Unknown Campaign"),
+  action: (entry.action as AutomationAction) ?? "no_action",
+  rule_triggered:
+    entry.rule_triggered === "scale_up" || entry.rule_triggered === "scale_down"
+      ? entry.rule_triggered
+      : null,
+  old_budget: Number(entry.old_budget) || 0,
+  new_budget: Number(entry.new_budget) || 0,
+  budget_utilization: Number(entry.budget_utilization) || 0,
+  today_acos: Number(entry.today_acos) || 0,
+  acos_target: Number(entry.acos_target) || 30,
+  acos_threshold: Number(entry.acos_threshold) || 40,
+  reason: String(entry.reason ?? ""),
+  created_at: String(entry.created_at ?? new Date().toISOString()),
+});
+
 export default function DashboardPage() {
+  const supabase = useMemo(() => getSupabaseClient(), []);
+
+  const [settings, setSettings] = useState<AdSettings>({
+    ...DEFAULT_AUTOMATION_SETTINGS,
+  });
+  const [logs, setLogs] = useState<AutomationLogEntry[]>(mockAutomationLog);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadDashboardData = async () => {
+      const [settingsResult, logsResult] = await Promise.all([
+        supabase
+          .from("ad_settings")
+          .select(
+            "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_enabled, daily_budget_cap",
+          )
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("automation_log")
+          .select(
+            "id, campaign_id, campaign_name, action, rule_triggered, old_budget, new_budget, budget_utilization, today_acos, acos_target, acos_threshold, reason, created_at",
+          )
+          .order("created_at", { ascending: false })
+          .limit(100),
+      ]);
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!settingsResult.error && settingsResult.data) {
+        setSettings(normalizeAdSettings(settingsResult.data as Partial<AdSettings>));
+      }
+
+      if (!logsResult.error && logsResult.data && logsResult.data.length > 0) {
+        setLogs((logsResult.data as Partial<AutomationLogEntry>[]).map(mapLog));
+      }
+    };
+
+    void loadDashboardData();
+
+    return () => {
+      mounted = false;
+    };
+  }, [supabase]);
+
   const totalSpend = mockCampaigns.reduce((sum, campaign) => sum + campaign.spend, 0);
   const totalRevenue = mockCampaigns.reduce((sum, campaign) => sum + campaign.sales, 0);
   const blendedAcos = calculateAcos(totalSpend, totalRevenue);
   const roas = calculateRoas(totalSpend, totalRevenue);
 
-  const topCampaigns = [...mockCampaigns]
-    .sort((a, b) => b.sales - a.sales)
-    .slice(0, 5);
+  const campaigns = [...mockCampaigns]
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 8);
+
+  const lastActionByCampaign = useMemo(() => {
+    const byCampaign = new Map<string, AutomationLogEntry>();
+
+    [...logs]
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .forEach((entry) => {
+        if (!byCampaign.has(entry.campaign_id)) {
+          byCampaign.set(entry.campaign_id, entry);
+        }
+      });
+
+    return byCampaign;
+  }, [logs]);
 
   const chartData = mockDailyReports.map((day) => ({
     ...day,
@@ -58,7 +156,7 @@ export default function DashboardPage() {
       <div>
         <h2 className="font-mono text-2xl font-semibold text-zinc-100">Dashboard</h2>
         <p className="text-sm text-zinc-400">
-          Last 30 days performance snapshot across all KDP campaigns.
+          Hourly automation outcomes and campaign efficiency snapshot.
         </p>
       </div>
 
@@ -145,38 +243,68 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Top Campaigns</CardTitle>
-          <CardDescription>Ranked by sales</CardDescription>
+          <CardDescription>
+            Live rule context. Target ACoS: {settings.target_acos}% | Threshold: {settings.acos_threshold}%
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Campaign</TableHead>
-                <TableHead className="text-right">Spend</TableHead>
-                <TableHead className="text-right">Sales</TableHead>
-                <TableHead className="text-right">ACoS</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Today Spend</TableHead>
+                <TableHead className="text-right">Daily Budget</TableHead>
+                <TableHead className="text-right">Util %</TableHead>
+                <TableHead className="text-right">Today ACoS</TableHead>
+                <TableHead>Last Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {topCampaigns.map((campaign) => {
-                const acos = calculateAcos(campaign.spend, campaign.sales);
+              {campaigns.map((campaign) => {
+                const util = campaign.budget_utilization;
+                const acos = campaign.today_acos;
+                const lastAction = lastActionByCampaign.get(campaign.id);
+
+                const utilClass =
+                  util < 80
+                    ? "text-emerald-300"
+                    : util <= 95
+                      ? "text-amber-300"
+                      : "text-red-300";
+
+                const acosClass =
+                  acos < settings.target_acos
+                    ? "text-emerald-300"
+                    : acos > settings.acos_threshold
+                      ? "text-red-300"
+                      : "text-zinc-300";
+
+                const action = lastAction?.action ?? "no_action";
 
                 return (
                   <TableRow key={campaign.id}>
                     <TableCell className="font-medium">{campaign.name}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={statusBadgeClass[campaign.status]}>
+                        {campaign.status}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-right font-mono">
                       {formatCurrency(campaign.spend)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(campaign.sales)}
+                      {formatCurrency(campaign.budget)}
                     </TableCell>
-                    <TableCell className="text-right font-mono">
+                    <TableCell className={`text-right font-mono ${utilClass}`}>
+                      {formatPercent(util)}
+                    </TableCell>
+                    <TableCell className={`text-right font-mono ${acosClass}`}>
                       {formatPercent(acos)}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className={statusBadgeClass[campaign.status]}>
-                        {campaign.status}
+                      <Badge variant="outline" className={actionBadgeClass[action]}>
+                        {action}
                       </Badge>
                     </TableCell>
                   </TableRow>
