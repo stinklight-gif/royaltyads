@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
-import { dark } from "@clerk/themes";
 
 import "./globals.css";
 
@@ -17,12 +16,12 @@ export default function RootLayout({
   return (
     <ClerkProvider
       appearance={{
-        baseTheme: dark,
         variables: {
           colorPrimary: "#D4A84B",
-          colorBackground: "#141418",
-          colorInputBackground: "#1A1A1F",
-          colorInputText: "#F5F5F5",
+          colorBackground: "#FFFFFF",
+          colorInputBackground: "#F5F5F5",
+          colorInputText: "#1A1A1F",
+          colorText: "#1A1A1F",
         },
       }}
     >

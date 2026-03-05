@@ -996,15 +996,21 @@ export default function LandingPage() {
             <div>
               <h4 className="mb-3 text-sm font-medium text-[#F5F5F5]">Legal</h4>
               <ul className="space-y-2">
-                {["Privacy Policy", "Terms of Service", "Cookie Policy"].map(
-                  (link) => (
-                    <li key={link}>
-                      <span className="cursor-pointer text-sm text-[#9CA3AF] transition-colors hover:text-[#F5F5F5]">
-                        {link}
-                      </span>
-                    </li>
-                  ),
-                )}
+                <li>
+                  <Link href="/privacy" className="text-sm text-[#9CA3AF] transition-colors hover:text-[#F5F5F5]">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <span className="cursor-pointer text-sm text-[#9CA3AF] transition-colors hover:text-[#F5F5F5]">
+                    Terms of Service
+                  </span>
+                </li>
+                <li>
+                  <span className="cursor-pointer text-sm text-[#9CA3AF] transition-colors hover:text-[#F5F5F5]">
+                    Cookie Policy
+                  </span>
+                </li>
               </ul>
             </div>
           </div>
