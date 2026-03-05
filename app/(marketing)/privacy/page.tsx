@@ -207,11 +207,7 @@ export default function PrivacyPolicyPage() {
 
           <Section title="12. Contact Us">
             <p>ERESOURCE LLC</p>
-            <p>
-              ceo{" "}
-              <span className="text-[#6B7280]">@</span>{" "}
-              eresource.io
-            </p>
+            <p>support@royaltyads.com</p>
           </Section>
         </div>
       </main>
