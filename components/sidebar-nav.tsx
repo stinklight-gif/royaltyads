@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
-  { href: "/", label: "Dashboard" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/campaigns", label: "Campaigns" },
   { href: "/optimizer", label: "Bid Optimizer" },
   { href: "/keywords", label: "Keywords" },
@@ -15,8 +15,8 @@ const navItems = [
 ];
 
 const isActivePath = (pathname: string, href: string) => {
-  if (href === "/") {
-    return pathname === "/";
+  if (href === "/dashboard") {
+    return pathname === "/dashboard";
   }
 
   return pathname.startsWith(href);
