@@ -12,6 +12,7 @@ export const DEFAULT_AUTOMATION_SETTINGS: AdSettings = {
   budget_floor: 5,
   automation_mode: "off",
   daily_budget_cap: 100,
+  read_only: true,
 };
 
 const toNumber = (value: unknown, fallback: number) => {
@@ -55,5 +56,9 @@ export const normalizeAdSettings = (
       raw.daily_budget_cap,
       DEFAULT_AUTOMATION_SETTINGS.daily_budget_cap,
     ),
+    read_only:
+      raw.read_only !== undefined
+        ? Boolean(raw.read_only)
+        : DEFAULT_AUTOMATION_SETTINGS.read_only,
   };
 };

@@ -21,7 +21,7 @@ const loadSettings = async (): Promise<AdSettings> => {
     const { data } = await supabase
       .from("ad_settings")
       .select(
-        "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap",
+        "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap, read_only",
       )
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -55,10 +55,10 @@ interface LogPayload {
 export async function GET() {
   const settings = await loadSettings();
 
-  if (settings.automation_mode === "off") {
+  if (settings.automation_mode === "off" || settings.read_only) {
     return NextResponse.json({
       ran: false,
-      reason: "automation_mode_off",
+      reason: settings.read_only ? "read_only_mode" : "automation_mode_off",
       settings: {
         target_acos: settings.target_acos,
         acos_threshold: settings.acos_threshold,
@@ -66,6 +66,7 @@ export async function GET() {
         scale_down_pct: settings.scale_down_pct,
         budget_floor: settings.budget_floor,
         automation_mode: settings.automation_mode,
+        read_only: settings.read_only,
       },
     });
   }

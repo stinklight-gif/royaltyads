@@ -91,7 +91,7 @@ export default function DashboardPage() {
         supabase
           .from("ad_settings")
           .select(
-            "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap",
+            "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap, read_only",
           )
           .order("updated_at", { ascending: false })
           .limit(1)

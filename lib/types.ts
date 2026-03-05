@@ -61,6 +61,7 @@ export interface AdSettings {
   budget_floor: number;
   automation_mode: AutomationMode;
   daily_budget_cap: number;
+  read_only: boolean;
 }
 
 export interface AutomationLogEntry {

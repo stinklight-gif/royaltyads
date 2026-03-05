@@ -54,7 +54,7 @@ export default function SettingsPage() {
       const { data, error } = await supabase
         .from("ad_settings")
         .select(
-          "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap",
+          "id, amazon_client_id, amazon_client_secret, amazon_refresh_token, amazon_profile_id, target_acos, acos_threshold, scale_up_pct, scale_down_pct, budget_floor, automation_mode, automation_enabled, daily_budget_cap, read_only",
         )
         .order("updated_at", { ascending: false })
         .limit(1)
@@ -114,6 +114,7 @@ export default function SettingsPage() {
       automation_mode: form.automation_mode,
       automation_enabled: form.automation_mode === "auto",
       daily_budget_cap: Number(form.daily_budget_cap),
+      read_only: form.read_only,
       updated_at: new Date().toISOString(),
     };
 
@@ -309,6 +310,38 @@ export default function SettingsPage() {
                 }
               />
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-md border border-red-800/40 bg-red-950/30 p-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-zinc-100">Read-Only Mode</p>
+                <p className="mt-0.5 text-xs text-zinc-400">
+                  When enabled, RoyaltyAds will never write to your Amazon Ads account. All API calls are read-only. The cron will not run.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => updateField("read_only", !form.read_only)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+                  form.read_only ? "bg-red-500" : "bg-zinc-700"
+                }`}
+                role="switch"
+                aria-checked={form.read_only}
+                aria-label="Toggle read-only mode"
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                    form.read_only ? "translate-x-5" : "translate-x-0"
+                  }`}
+                />
+              </button>
+            </div>
+            {form.read_only && (
+              <p className="text-xs font-medium text-red-400">
+                Read-only is ON — no changes will be pushed to Amazon, regardless of automation mode.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2 rounded-md border border-zinc-800 bg-zinc-900/60 p-3">

@@ -46,6 +46,23 @@ const mockLogMap = new Map(
 const normalize = (value?: string | null) => value?.trim() ?? "";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const isReadOnly = async (): Promise<boolean> => {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase
+      .from("ad_settings")
+      .select("read_only")
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    // Default to read-only if no setting exists
+    return data?.read_only !== false;
+  } catch {
+    return true;
+  }
+};
+
 const hasCredentials = (
   settings: StoredCredentials | null,
 ): settings is StoredCredentials => {
@@ -374,6 +391,11 @@ export const updateBid = async (
   keywordId: string,
   bid: number,
 ): Promise<Keyword | null> => {
+  if (await isReadOnly()) {
+    console.log(`[READ-ONLY] Blocked updateBid for keyword ${keywordId}`);
+    return null;
+  }
+
   const existingKeyword =
     mockKeywordMap.get(keywordId) ||
     [...mockKeywordMap.values()].find(
@@ -427,6 +449,11 @@ export const updateBudget = async (
   campaignId: string,
   newBudget: number,
 ): Promise<Campaign | null> => {
+  if (await isReadOnly()) {
+    console.log(`[READ-ONLY] Blocked updateBudget for campaign ${campaignId}`);
+    return null;
+  }
+
   const existingCampaign =
     mockCampaignMap.get(campaignId) ||
     [...mockCampaignMap.values()].find(
@@ -484,6 +511,11 @@ export const toggleCampaign = async (
   campaignId: string,
   status: CampaignStatus,
 ): Promise<Campaign | null> => {
+  if (await isReadOnly()) {
+    console.log(`[READ-ONLY] Blocked toggleCampaign for campaign ${campaignId}`);
+    return null;
+  }
+
   const existingCampaign =
     mockCampaignMap.get(campaignId) ||
     [...mockCampaignMap.values()].find(
